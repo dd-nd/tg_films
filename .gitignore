@@ -1,2 +1,3 @@
-__pycache__
 content.db
+database.db
+.env
