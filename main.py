@@ -30,7 +30,7 @@ def get_data(name):
             'countries': data['countries'],
             'year': data['year'],
             'genres': data['genres'],
-            'description': data['description'],
+            'description': data['shortDescription'],
             'poster': data['poster']['previewUrl']
         }
         return json_data
@@ -101,45 +101,28 @@ def get_movies_info(message: Message):
         bot.send_message(message.chat.id, f'Что-то пошло не так 🤗\n{str(e)}')
 
 
-files_to_update = {}  # Словарь для хранения названий файлов, требующих обновления
 
-# Обработчик выбора фильма для поиска по кнопке
+'''
+Обработчик выбора фильма для поиска по кнопке
+'''
 @bot.callback_query_handler(func=lambda call: call.data.startswith('action_'))
 def handle_file_actions(call: CallbackQuery):
-    selected_file = call.data.split('_')[1:]
-    selected_file = '_'.join(selected_file)
+    selected_movie = call.data.split('_')[1:]
+    selected_movie = '_'.join(selected_movie)
 
-    files_to_update[selected_file] = call.from_user.id
-    json_data = get_data(selected_file)
+    json_data = get_data(selected_movie)
     countries = [ country['name'] for country in json_data['countries'] ]
     genres = [ name['name'] for name in json_data['genres'] ]
     
-    bot.send_photo(call.message.chat.id, photo=json_data['poster'], caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}")
+    markup = InlineKeyboardMarkup()
+    lnk = f'смотреть%20{json_data["name"].replace(" ", "%20")}%20{json_data["year"]}%20онлайн'
+    btn_google = InlineKeyboardButton(text='Google', url=f'https://www.google.com/search?q={lnk}')
+    btn_yandex = InlineKeyboardButton(text='Яндекс', url=f'https://yandex.ru/search/?text={lnk}')
+    markup.add(btn_google, btn_yandex)
 
-
-# @bot.callback_query_handler(func=lambda call: any(action in call.data for action in actions))
-# def execute_file_action(call: CallbackQuery):
-#     action, selected_file = call.data.split('_')[0], call.data.split('_')[1:]
-#     selected_file = '_'.join(selected_file)
-
-#     files_to_update[selected_file] = call.from_user.id
-
-#     # Логика для скачивания файла
-#     if action == 'Download':
-#         if call.from_user.id == files_to_update.get(selected_file):
-#             try:
-#                 with sq.connect('db/database.db') as con:
-#                     cur = con.cursor()
-#                     cur.execute(f"SELECT data, format FROM files WHERE user_id = {call.from_user.id} AND name = '{selected_file}'")
-#                     file_data, data_format = cur.fetchone()
-
-#                     bot.send_document(call.message.chat.id, file_data, visible_file_name=f'{selected_file}.{data_format}')
-                        
-#                     del files_to_update[selected_file]
-#             except Exception as e:
-#                 bot.send_message(call.message.chat.id, f'Что-то пошло не так 🤗\n{str(e)}')
-#         else:
-#             bot.send_message(call.message.chat.id, 'У вас нет разрешения на доступ к этому файлу! ❌')
+    bot.send_photo(call.message.chat.id, photo=json_data['poster'], 
+                   caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}", 
+                   reply_markup=markup)
 
 
 '''
