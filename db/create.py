@@ -24,6 +24,7 @@ with sq.connect('db/database.db') as con:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
                 ru_name varchar UNIQUE, 
                 alternative_name varchar,
+                year integer,
                 genres varchar,
                 id_status INTEGER,
                 id_user INTEGER, 
