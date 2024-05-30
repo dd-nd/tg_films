@@ -70,12 +70,14 @@ def add_item(message):
             bot.reply_to(message, 'Пожалуйста, введите название фильма.')
         except Exception as e:
             bot.reply_to(message, f'При получении данных произошла ошибка. Пожалуйста, попробуйте снова позже. ❌\n\n{str(e)}')
-
-    with sq.connect('db/database.db') as con:   # Добавление в базу
-        cur = con.cursor()
-        cur.execute("INSERT INTO items (ru_name, alternative_name, year, genres, id_user) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ru_name) DO NOTHING", 
-                    (json_data['name'], json_data['alternativeName'], json_data['year'], json.dumps(json_data['genres'], ensure_ascii=False), message.from_user.id))
-        con.commit()
+    try:
+        with sq.connect('db/database.db') as con:   # Добавление в базу
+            cur = con.cursor()
+            cur.execute("INSERT INTO items (ru_name, alternative_name, year, genres, id_user) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ru_name) DO NOTHING", 
+                        (json_data['name'], json_data['alternativeName'], json_data['year'], json.dumps(json_data['genres'], ensure_ascii=False), message.from_user.id))
+            con.commit()
+    except Exception as e:
+        return
     bot.reply_to(message, f'Фильм успешно добавлен! 🎉')
 
 
@@ -103,28 +105,47 @@ def get_movies_info(message: Message):
         bot.send_message(message.chat.id, f'Что-то пошло не так 🤗\n{str(e)}')
 
 
-
 '''
 Обработчик выбора фильма для поиска по кнопке
 '''
 @bot.callback_query_handler(func=lambda call: call.data.startswith('action_'))
-def handle_file_actions(call: CallbackQuery):
+def handle_movies_actions(call: CallbackQuery):
     selected_movie = call.data.split('_')[1:]
     selected_movie = '_'.join(selected_movie)
 
     json_data = get_data(selected_movie)
     countries = [ country['name'] for country in json_data['countries'] ]
     genres = [ name['name'] for name in json_data['genres'] ]
-    
-    markup = InlineKeyboardMarkup()
+
     lnk = f'смотреть%20{json_data["name"].replace(" ", "%20")}%20{json_data["year"]}%20онлайн'
+
+    markup = InlineKeyboardMarkup()
     btn_google = InlineKeyboardButton(text='Google', url=f'https://www.google.com/search?q={lnk}')
     btn_yandex = InlineKeyboardButton(text='Яндекс', url=f'https://yandex.ru/search/?text={lnk}')
+    btn_delete = InlineKeyboardButton(text='Шмебьюлок',  callback_data=f'delete_{selected_movie}')
+
     markup.add(btn_google, btn_yandex)
+    markup.add(btn_delete)
 
     bot.send_photo(call.message.chat.id, photo=json_data['poster'], 
                    caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}", 
                    reply_markup=markup)
+    
+
+'''
+Обработчик удаления фильма по кнопке
+'''
+@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_'))
+def handle_movies_delete(call: CallbackQuery):
+    selected_movie = call.data.split('_')[1:]
+    selected_movie = '_'.join(selected_movie)
+
+    with sq.connect('db/database.db') as con:
+        cur = con.cursor()
+        cur.execute(f'DELETE FROM items WHERE ru_name = ? and id_user = ?', (selected_movie, call.from_user.id))
+        con.commit()
+
+    bot.send_message(call.message.chat.id, 'Произошел шмебьюлок, фильм был удален 🍄')
 
 
 '''
