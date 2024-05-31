@@ -8,19 +8,25 @@ import json
 
 bot = telebot.TeleBot(getenv('BOT_TOKEN'))
 lastMessage = None
-headers = {
+first_api_headers = {
     "accept": "application/json",
     "X-API-KEY": getenv('API_TOKEN')
+}
+
+second_api_headers = {
+    "accept": "application/json",
+    "X-API-KEY": getenv('X_API_KEY')
 }
 
 ''' Функция для получения данных о фильме по названию '''
 def get_data(name):
     url = f"https://api.kinopoisk.dev/v1.4/movie/search?page=1&limit=1&query={quote(name)}"
-    data = json.loads(requests.get(url, headers=headers).text)
+    data = json.loads(requests.get(url, headers=first_api_headers).text)
 
     try:
         data = data['docs'][0]
         json_data = {
+            'id': data['id'],
             'name': data['name'],
             'alternativeName': data['alternativeName'],
             'countries': data['countries'],
@@ -130,8 +136,6 @@ def handle_movies_actions(call: CallbackQuery):
 
     if call.message.message_id != old_message_id:   # Сравнение идентификаторов сообщений
         bot.send_photo(call.message.chat.id, photo=json_data['poster'],
-                       
-
                        caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}",
                        reply_markup=markup)
         old_message_id = call.message.message_id    # Обновление идентификатора
@@ -156,6 +160,38 @@ def handle_movies_delete(call: CallbackQuery):
     bot.send_message(call.message.chat.id, 'Произошел шмебьюлок, фильм был удален 🍄')
 
 
+''' Обработчик поиска похожего фильма по id '''
+@bot.message_handler(commands=['similar'])
+def similar_by_id(message: Message):
+    # Получение id
+    name = message.text.split(' ', 1)[1]
+    json_data = get_data(name)
+    
+    id = json_data['id']
+    try:    # Поиск похожего фильма по id
+        url = f"https://kinopoiskapiunofficial.tech/api/v2.2/films/{id}/similars"
+        data = json.loads(requests.get(url, headers=second_api_headers).text)
+        print(data)
+        data = data['items'][0]
+        json_data = {
+            'name': data['nameRu'],
+            'alternativeName': data['nameEn'],
+            'poster': data['posterUrlPreview']
+        }
+    except Exception as e:
+        bot.send_message(message.chat.id, f'Что-то пошло не так 🤗\n{str(e)}')
+
+    markup = InlineKeyboardMarkup()
+    lnk = f'смотреть%20{json_data["name"].replace(" ", "%20")}%20онлайн'
+    btn_google = InlineKeyboardButton(text='Google', url=f'https://www.google.com/search?q={lnk}')
+    btn_yandex = InlineKeyboardButton(text='Яндекс', url=f'https://yandex.ru/search/?text={lnk}')
+    markup.add(btn_google, btn_yandex)
+
+    bot.send_photo(message.chat.id, photo=json_data['poster'], 
+                   caption=f"{json_data['name']} ({json_data['alternativeName']})",
+                   reply_markup=markup)
+
+
 ''' Обработчик текстового сообщения для поиска фильма '''
 @bot.message_handler(content_types='text')
 def text_searching(message: Message):
@@ -170,11 +206,28 @@ def text_searching(message: Message):
     lnk = f'смотреть%20{json_data["name"].replace(" ", "%20")}%20{json_data["year"]}%20онлайн'
     btn_google = InlineKeyboardButton(text='Google', url=f'https://www.google.com/search?q={lnk}')
     btn_yandex = InlineKeyboardButton(text='Яндекс', url=f'https://yandex.ru/search/?text={lnk}')
+    btn_add = InlineKeyboardButton(text='Добавить', callback_data=f'add_{json_data["id"]}')
     markup.add(btn_google, btn_yandex)
+    markup.add(btn_add)
 
     bot.send_photo(message.chat.id, photo=json_data['poster'], 
                    caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}",
                    reply_markup=markup)
+
+
+''' Обработчик добавления фильма по кнопке '''
+@bot.callback_query_handler(func=lambda call: call.data.startswith('add_'))
+def handle_movies_delete(call: CallbackQuery):
+    json_data = get_data(lastMessage)
+    try:
+        with sq.connect('db/database.db') as con:   # Добавление в базу
+            cur = con.cursor()
+            cur.execute(f"INSERT INTO items (ru_name, alternative_name, year, genres, id_user) VALUES (?, ?, ?, ?, ?)", 
+                        (json_data['name'], json_data['alternativeName'], json_data['year'], json.dumps(json_data['genres'], ensure_ascii=False), call.from_user.id))
+            con.commit()
+    except Exception as e:
+        return
+    bot.send_message(call.message.chat.id, f'Фильм успешно добавлен! 🎉')
 
 
 if __name__ == '__main__':
