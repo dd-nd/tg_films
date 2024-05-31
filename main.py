@@ -42,7 +42,14 @@ def start(message: Message):
         cur.execute('INSERT INTO users (user_id, user_name, user_surname, username) VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO NOTHING',
                     (message.from_user.id, message.from_user.first_name, message.from_user.last_name, message.from_user.username))
         con.commit()
-    bot.send_message( message.chat.id, 'Привет, я бот, который поможет тебе смотреть сериалы.' )
+    bot.send_message( message.chat.id, 'Шмебьюлок 👋' )
+
+
+''' Обработчик команды /help '''
+@bot.message_handler(commands=['help'])
+def start(message: Message):
+    text = '🍄 Инструкция 🍄\n/start - регистрация нового пользователя\n/add [название] [год] - добавление фильма по названию и году\n/add - добавление последнего фильма из поиска\n/all - все добавленные вами фильмы\nА еще можно выполнить поиск сразу, без добавления его в список. Для этого просто введите его название.'
+    bot.send_message( message.chat.id, text)
 
 
 ''' Обработчик команды /add [название] [дата] для добавления фильма по названию и дате (необязательна)
@@ -80,6 +87,7 @@ old_message_id = None
 @bot.message_handler(commands=['all'])
 def get_movies_info(message: Message):
     global old_message_id
+    old_message_id = message.message_id
 
     try:
         with sq.connect('db/database.db') as con: 
@@ -97,7 +105,6 @@ def get_movies_info(message: Message):
         bot.send_message(message.chat.id, 'Выбери фильм для дальнейших действий 🤗', reply_markup=markup)
     except Exception as e:
         bot.send_message(message.chat.id, f'Что-то пошло не так 🤗\n{str(e)}')
-    old_message_id = message.message_id
 
 
 ''' Обработчик выбора фильма для поиска по кнопке '''
@@ -123,6 +130,8 @@ def handle_movies_actions(call: CallbackQuery):
 
     if call.message.message_id != old_message_id:   # Сравнение идентификаторов сообщений
         bot.send_photo(call.message.chat.id, photo=json_data['poster'],
+                       
+
                        caption=f"{json_data['name']} ({json_data['alternativeName']})\n\n{', '.join(countries)}, {json_data['year']}\n\n{', '.join(genres)}\n\n{json_data['description']}",
                        reply_markup=markup)
         old_message_id = call.message.message_id    # Обновление идентификатора
